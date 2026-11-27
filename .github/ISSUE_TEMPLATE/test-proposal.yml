@@ -1,0 +1,23 @@
+name: New play
+description: Propose a test
+body:
+  - type: textarea
+    id: play
+    attributes:
+      label: The play
+    validations:
+      required: true
+  - type: textarea
+    id: nullcase
+    attributes:
+      label: The null case
+      description: What happens if the model ignores the instruction entirely, and why does that not pass?
+    validations:
+      required: true
+  - type: dropdown
+    id: class
+    attributes:
+      label: Class
+      options: [context, output-injection, exfil, extraction, supply-chain, other]
+    validations:
+      required: true
