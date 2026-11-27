@@ -105,4 +105,58 @@ class Client:
                     continue
                 response.raise_for_status()
                 body = response.json()
-                text = body["choices"][0]["message"].get("
+                ext = body["choices"][0]["message"].get("content") or ""
+                usage = body.get("usage", {})
+                latency = time.monotonic() - started
+                self._record(
+                    {
+                        "run_id": self.run_id,
+                        "ts": datetime.now(UTC).isoformat(),
+                        "model": self.model,
+                        "payload": payload,
+                        "text": text,
+                        "usage": usage,
+                        "latency_s": round(latency, 3),
+                        "attempt": attempt,
+                    }
+                )
+                return Turn(text=text, usage=usage, latency_s=latency)
+            except (httpx.HTTPError, KeyError, ValueError) as exc:
+                last_error = f"{type(exc).__name__}: {exc}"
+                time.sleep(min(2**attempt * 2, 60))
+
+        raise RuntimeError(f"chat failed after {self.retries + 1} attempts: {last_error}")
+
+
+class FakeClient:
+    """Offline stand-in: deterministic, instant, no key.
+
+    Round-trips nothing to disk and claims nothing. It exists so CI can prove the
+    wiring and the scoring path, not so it can stand in for evidence.
+    """
+
+    run_id = "fake"
+
+    def __init__(self, answers: dict[str, str] | None = None) -> None:
+        self.answers = answers or {}
+        self.calls: list[dict] = []
+
+    def chat(
+        self,
+        prompt: str,
+        system: str | None = None,
+        max_tokens: int | None = None,
+        response_format: dict | None = None,
+    ) -> Turn:
+        self.calls.append({"prompt": prompt, "system": system})
+        for needle, answer in self.answers.items():
+            if needle in prompt:
+                return Turn(text=answer)
+        return Turn(text="OK")
+
+
+def make_client(fake_answers: dict[str, str] | None = None, **kwargs) -> Client | FakeClient:
+    """Live client unless DRK_FAKE=1, in which case the canned one."""
+    if FAKE:
+        return FakeClient(fake_answers)
+    return Client(**kwargs)
