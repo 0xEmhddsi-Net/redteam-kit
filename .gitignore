@@ -1,0 +1,26 @@
+# secrets
+.env
+*.pem
+
+# runs
+runs/
+*.jsonl
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# shared, committed reports are the only exception
+!reports/*.json
+!reports/*.md
+
+# os / editor
+.DS_Store
+*.swp
