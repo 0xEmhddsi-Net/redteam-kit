@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 import httpx
 
 ENDPOINTS = {
     "pypi": "https://pypi.org/pypi/{}/json",
     "npm": "https://registry.npmjs.org/{}",
 }
-SUSPECT = {429, 500, 502, 503, 504}
 
 
 def exists(ecosystem: str, name: str, timeout: float = 15.0) -> bool | None:
-    url = ENDPOINTS[ecosystem].format(name)
+    if ecosystem not in ENDPOINTS:
+        raise ValueError(f"unsupported package ecosystem: {ecosystem}")
+    url = ENDPOINTS[ecosystem].format(quote(name, safe="@"))
     try:
         with httpx.Client(timeout=timeout, follow_redirects=True) as http:
             code = http.get(url).status_code

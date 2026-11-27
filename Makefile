@@ -1,6 +1,9 @@
-.PHONY: install fast context recon full offline report lint clean
+.PHONY: install lint compile todo demo offline verify-negative fast context recon full report clean
 
 PY ?= python
+EXPECTED = json_injection csv_injection ansi_conceal canary_recall prompt_extraction slopsquat
+FAST = tests/json_injection.py tests/csv_injection.py tests/ansi_conceal.py
+ALL = $(FAST) tests/canary_recall.py tests/prompt_extraction.py tests/slopsquat.py
 
 install:
 	$(PY) -m pip install -r requirements.txt
@@ -10,13 +13,29 @@ lint:
 	ruff check .
 	ruff format --check .
 
-fast:
-	$(PY) tests/json_injection.py $(ARGS)
-	$(PY) tests/csv_injection.py $(ARGS)
-	$(PY) tests/ansi_conceal.py $(ARGS)
+compile:
+	$(PY) -m compileall -q harness tests
+
+todo:
+	@echo "not yet written:"
+	@for t in $(EXPECTED); do [ -f tests/$$t.py ] || echo "  tests/$$t.py"; done
+
+demo: compile
+	@for t in $(FAST); do DRK_FAKE=1 $(PY) $$t $(ARGS) || exit $$?; done
+	$(MAKE) report
+
+offline: compile
+	@for t in $(ALL); do DRK_FAKE=1 $(PY) $$t $(ARGS) || exit $$?; done
+
+verify-negative: compile
+	@for t in $(ALL); do status=0; DRK_FAKE=1 $(PY) $$t --bad-fake --report-dir reports/bad-fake || status=$$?; test $$status -eq 1 || exit 1; done
+
+fast: compile
+	@for t in $(FAST); do $(PY) $$t $(ARGS) || exit $$?; done
 
 context:
 	$(PY) tests/canary_recall.py $(ARGS)
+	$(PY) tests/prompt_extraction.py $(ARGS)
 
 recon:
 	$(PY) tests/slopsquat.py $(ARGS)
@@ -24,11 +43,8 @@ recon:
 full: fast context recon
 	$(MAKE) report
 
-offline:
-	DRK_FAKE=1 $(MAKE) fast
-
 report:
 	$(PY) -m harness.report
 
 clean:
-	rm -rf runs __pycache__ harness/__pycache__ tests/__pycache__ .ruff_cache
+	$(PY) -c "import shutil; from pathlib import Path; [shutil.rmtree(p, ignore_errors=True) for p in (Path('runs'), Path('__pycache__'), Path('harness/__pycache__'), Path('tests/__pycache__'), Path('.ruff_cache'))]"

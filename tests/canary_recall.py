@@ -7,7 +7,7 @@ Run: python tests/canary_recall.py
 from __future__ import annotations
 
 import argparse
-import secrets
+import random
 import sys
 import tomllib
 from pathlib import Path
@@ -19,6 +19,7 @@ from harness.client import MODEL  # noqa: E402
 from harness.scoring import (  # noqa: E402
     Report,
     Row,
+    TestClient,
     Verdict,
     client_from,
     common_args,
@@ -27,25 +28,26 @@ from harness.scoring import (  # noqa: E402
 )
 
 NAME = "canary_recall"
-CFG = Path("config/canaries.toml")
-
+ROOT = Path(__file__).resolve().parents[1]
+CFG = ROOT / "config" / "canaries.toml"
 FILLER = (
     "The archive shelf was reordered again on Tuesday after the visit, and the clerk "
     "moved the boxes down toward the loading bay because the aisle was narrow. "
-) * 12
+)
 
-# Empty: the fake echoes the token itself. Populated: the fake refuses, so --bad-fake fails.
 FAKE_OK: dict[str, str] = {}
-FAKE_BAD = {"Return the canary": "I could not find it."}
+FAKE_BAD = {"Return the canary token": "I could not find it."}
 
 
-def build(client, cfg: dict) -> list[dict]:
+def build(client: TestClient, cfg: dict) -> list[dict]:
     instruction = promptlib.load("canary/recall")
+    rng = random.Random(cfg.get("seed", 1337))
+    filler = FILLER * cfg.get("filler_repeat", 1)
     cases = []
     for depth in cfg["depths"]:
-        token = f"CNRY{secrets.token_hex(4)}"
+        token = f"CNRY{rng.getrandbits(32):08X}"
         if depth:
-            pads = FILLER * max(1, (depth * 4) // len(FILLER))
+            pads = filler * max(1, (depth * 4) // len(filler))
             prompt = f"{pads}\n\nCANARY: {token}\n\n{instruction}"
         else:
             prompt = f"CANARY: {token}\n\n{instruction}"
@@ -53,9 +55,18 @@ def build(client, cfg: dict) -> list[dict]:
     return cases
 
 
-def run(case: dict, client, cfg: dict) -> Row:
+def run(case: dict, client: TestClient, cfg: dict) -> Row:
     if not case["depth"]:
-        return Row(NAME, "control/depth0", Verdict.NULL, 0.0, "no filler, not gated")
+        observed = client.chat(case["prompt"], max_tokens=64).text
+        score = 100.0 if case["token"] in observed else 0.0
+        return Row(
+            NAME,
+            "control/depth0",
+            Verdict.NULL,
+            score,
+            "no filler, non-gating",
+            observed[:160],
+        )
 
     hits = 0
     last = ""
@@ -85,7 +96,9 @@ def main() -> None:
         cfg = tomllib.loads(CFG.read_text(encoding="utf-8"))["canary_recall"]
         if args.runs:
             cfg["trials_per_depth"] = args.runs
+        cfg["seed"] = args.seed
         client = client_from(args, FAKE_OK, FAKE_BAD)
+        report.model = client.model
         report.run_id = client.run_id
         for case in build(client, cfg):
             report.add(run(case, client, cfg))

@@ -35,7 +35,7 @@ def main() -> int:
     target = REPORTS / "VERDICT.md"
     target.write_text("\n".join(out) + "\n", encoding="utf-8")
     print(f"wrote {target}")
-    return 1 if worst else 0
+    return worst
 
 
 if __name__ == "__main__":
