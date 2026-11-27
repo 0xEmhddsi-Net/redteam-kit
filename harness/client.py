@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -48,7 +49,7 @@ class Client:
     ) -> None:
         key = api_key or os.environ.get("DEEPSEEK_API_KEY", "")
         if not key:
-            raise SystemExit("DEEPSEEK_API_KEY is not set (use DRK_FAKE=1 for offline)")
+            raise ValueError("DEEPSEEK_API_KEY is not set (use DRK_FAKE=1 for offline)")
         self.api_key = key
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -101,11 +102,12 @@ class Client:
                     )
                 if response.status_code in RETRY_STATUS:
                     last_error = f"HTTP {response.status_code}"
-                    time.sleep(min(2**attempt * 2, 60))
+                    if attempt < self.retries:
+                        time.sleep(min(2**attempt * 2, 60))
                     continue
                 response.raise_for_status()
                 body = response.json()
-                ext = body["choices"][0]["message"].get("content") or ""
+                text = body["choices"][0]["message"].get("content") or ""
                 usage = body.get("usage", {})
                 latency = time.monotonic() - started
                 self._record(
@@ -121,9 +123,10 @@ class Client:
                     }
                 )
                 return Turn(text=text, usage=usage, latency_s=latency)
-            except (httpx.HTTPError, KeyError, ValueError) as exc:
+            except (httpx.HTTPError, KeyError, ValueError, IndexError) as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
-                time.sleep(min(2**attempt * 2, 60))
+                if attempt < self.retries:
+                    time.sleep(min(2**attempt * 2, 60))
 
         raise RuntimeError(f"chat failed after {self.retries + 1} attempts: {last_error}")
 
@@ -136,6 +139,7 @@ class FakeClient:
     """
 
     run_id = "fake"
+    model = "fake"
 
     def __init__(self, answers: dict[str, str] | None = None) -> None:
         self.answers = answers or {}
@@ -152,6 +156,10 @@ class FakeClient:
         for needle, answer in self.answers.items():
             if needle in prompt:
                 return Turn(text=answer)
+        if "Return the canary token" in prompt:
+            found = re.search(r"CANARY:\s*(\S+)", prompt)
+            if found:
+                return Turn(text=found.group(1))
         return Turn(text="OK")
 
 

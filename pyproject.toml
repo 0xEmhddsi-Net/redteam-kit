@@ -1,6 +1,6 @@
 [project]
-name = "deepseek-redteam-kit"
-version = "0.1.0"
+name = "redteam-kit"
+version = "0.2.0"
 description = "Repeatable black-hat-shaped test kit for DeepSeek V4.1 Flash"
 requires-python = ">=3.11"
 license = { text = "MIT" }

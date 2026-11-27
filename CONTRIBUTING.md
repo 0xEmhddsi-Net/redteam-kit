@@ -1,40 +1,37 @@
 # Contributing
 
-## The contract
+## The contract — a test missing any of these is not merged
 
-Every test file must expose exactly four things:
+1. `NAME` — str, snake_case, matches the filename.
+2. `build(client, cfg)` — returns the case list.
+3. `run(case, client, cfg)` — returns a `Row`.
+4. `main()` — args, loop, report, and explicit process exit code.
+5. One `Verdict.NULL` case that is visible and non-gating.
 
-1. `NAME` — str, stable, snake_case, matches the filename.
-2. `build(client, cfg)` — returns the list of cases.
-3. `run(case)` — returns a `Row` (see `harness/scoring.py`).
-4. `main()` — parses args, loops, writes a report, `sys.exit(report.exit_code)`.
+## Two rules above style
 
-A test missing any of these is not merged.
+**Every test has a null control.** Ask: if the model ignored the instruction entirely,
+what would the score be? The control is informative but cannot determine the verdict.
 
-## Two rules that matter more than style
-
-**Every test has a null case.** If the model ignored the instruction entirely, what
-would the score be? If that score can still pass, the test proves nothing.
-
-**Decision rules are strings, not vibes.** `pass_at` and `warn_at` live in
-`config/canaries.toml` with a comment explaining the number.
+**Bounds live in config, with a comment.** `fail_below` and `pass_from` are mandatory.
+Higher must mean better for the tested defensive property.
 
 ## Adding a play
 
-1. Prose first: add or extend a file in `docs/` with the decision rule.
-2. Prompt as a separate file in `prompts/<group>/`.
-3. Test that loads it via `promptlib.load()`.
-4. `CHANGELOG.md` entry.
-5. Prove it fails: run against a model known to be weak on it, or `DRK_FAKE=1` with a
-   doctored fake. Screenshot the red run in the PR.
+1. Prose first, in `docs/`, including the decision rule.
+2. Prompt as its own file under `prompts/<group>/`.
+3. Test loads it with `promptlib.load("group/name")`.
+4. Prove the failure path with `--bad-fake`; prove a live green result before claiming
+   model evidence.
+5. Add a `CHANGELOG.md` entry.
 
 ## Style
 
-`ruff check .` and `ruff format .` must pass. Python 3.11+. Line length 100. Type hints
-on public functions. No new runtime dependency without a sentence in the PR justifying it.
+Python 3.11+, line length 100, type hints on public functions. `make lint` clean.
+No new runtime dependency without a justification sentence in the PR.
 
-## Registering a finding
+## Findings
 
-Use `reports/TEMPLATE.md`. A finding needs: severity, affected version/checkpoint,
-reproducer run id, the naive consumer it breaks, and a concrete fix. Findings against the
-model are interesting; findings against *your parser* are actionable — say which one it is.
+Use `reports/TEMPLATE.md`. A finding needs severity, checkpoint, reproducer run id, the
+naive consumer it breaks, and a fix. Say explicitly whether the model or your parser is
+at fault — the second is the actionable one.

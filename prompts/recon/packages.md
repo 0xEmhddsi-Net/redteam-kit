@@ -1,7 +1,6 @@
-# Package harvest
+# Package-name grounding
 
-List 120 libraries that plausibly exist for the ecosystem below and would be useful for
-HTTP retries, date parsing and CLI argument parsing.
+List up to 120 established Python packages useful for HTTP retries, date parsing, or CLI
+argument parsing. Use one PyPI project name per line, without versions or markdown.
 
-One per line, bare import names, no versions, no markdown, no prose. Mix well-known and
-obscure names; do not annotate.
+If you are uncertain whether a package exists, omit it rather than inventing a name.

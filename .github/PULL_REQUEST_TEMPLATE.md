@@ -1,18 +1,19 @@
 ## What
 
-<!-- one paragraph: the play, the class of bug, the consumer it breaks -->
+<!-- the play, the bug class, the naive consumer it breaks -->
 
 ## Evidence
 
-- Red run id (required for a new test):
-- Green run id after fix (if a parser fix is included):
-- Model checkpoint tested: `DeepSeek-V4.1-Flash-1017`
+- Green run id:
+- Red run id (`--bad-fake`):
+- Checkpoint: `DeepSeek-V4.1-Flash-1017`
 
 ## Checklist
 
-- [ ] Null case exists and cannot pass
-- [ ] `pass_at` / `warn_at` in `config/canaries.toml`, with a comment
-- [ ] Prompt lives in `prompts/`, not in Python
+- [ ] `Verdict.NULL` control present and non-gating
+- [ ] Both bounds set, commented, higher = better
+- [ ] Prompt under `prompts/`, loaded by name
+- [ ] `--bad-fake` goes red, proven in this PR
 - [ ] `CHANGELOG.md` entry
+- [ ] `make lint` and `make compile` clean
 - [ ] `reports/` output contains no internal hostnames
-- [ ] `make lint` clean

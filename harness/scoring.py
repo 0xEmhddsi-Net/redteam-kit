@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 from dataclasses import asdict, dataclass, field
-from enum import Enum
+from enum import StrEnum
+from pathlib import Path
 
-from harness.client import Client
+from harness.client import FAKE, Client, FakeClient
+
+TestClient = Client | FakeClient
 
 
-class Verdict(str, Enum):
+class Verdict(StrEnum):
     PASS = "pass"
     WARN = "warn"
     FAIL = "fail"
@@ -68,9 +72,31 @@ class Report:
             "rows": [asdict(r) for r in self.rows],
         }
 
-    def finish(self, path) -> None:
+    def finish(self, path: Path) -> None:
         import json
 
+        if not any(row.verdict is Verdict.NULL for row in self.rows) and not any(
+            row.verdict is Verdict.ERROR for row in self.rows
+        ):
+            self.add(
+                Row(
+                    self.test,
+                    "contract/null-control",
+                    Verdict.ERROR,
+                    0.0,
+                    "missing null control",
+                )
+            )
+        if not self.gated() and not any(row.verdict is Verdict.ERROR for row in self.rows):
+            self.add(
+                Row(
+                    self.test,
+                    "contract/no-gated-cases",
+                    Verdict.ERROR,
+                    0.0,
+                    "no scored cases",
+                )
+            )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(self.payload(), indent=2), encoding="utf-8")
         print(f"\n{self.test}: mean {self.mean():.1f} over {len(self.gated())} cases -> {path}")
@@ -79,6 +105,8 @@ class Report:
 
 def decide(score: float, fail_below: float, pass_from: float) -> Verdict:
     """Floor/target judgement. Both bounds are mandatory: a one-sided test is a wish."""
+    if fail_below > pass_from:
+        raise ValueError("fail_below must be less than or equal to pass_from")
     if score >= pass_from:
         return Verdict.PASS
     if score >= fail_below:
@@ -90,12 +118,27 @@ def errored(report: Report, name: str, exc: Exception) -> None:
     report.add(Row(name, "setup", Verdict.ERROR, 0.0, f"{type(exc).__name__}: {exc}"))
 
 
-def common_args(parser) -> None:
-    parser.add_argument("--runs", type=int, default=None, help="override config trial count")
+def common_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--runs", type=positive_int, default=None, help="override config trial count"
+    )
     parser.add_argument("--report-dir", default="reports")
     parser.add_argument("--bad-fake", action="store_true", help="use canned failing answers")
     parser.add_argument("--seed", type=int, default=1337)
 
 
-def client_from(args, fake_ok: dict, fake_bad: dict) -> Client:
-    return make_client(fake_bad if args.bad_fake else fake_ok, temperature=0.2)
+def positive_int(value: str) -> int:
+    """Argparse converter for positive trial counts."""
+    parsed = int(value)
+    if parsed < 1:
+        raise ValueError("must be a positive integer")
+    return parsed
+
+
+def client_from(
+    args: argparse.Namespace, fake_ok: dict[str, str], fake_bad: dict[str, str]
+) -> TestClient:
+    """Create the live client, an offline client, or the deliberately failing fake."""
+    if FAKE or args.bad_fake:
+        return FakeClient(fake_bad if args.bad_fake else fake_ok)
+    return Client(temperature=0.2)
